@@ -124,18 +124,16 @@ class Piece:
     def move_right(self):
         """Moves the piece to the right"""
         print("move piece to the right")
-        if not Platform.is_colliding_with_platform(self.blocks):
-            for row in self.blocks:
-                for block in row:
-                    block.set_pos_x(block.get_pos_x() + BLOCK_SIZE)
+        for row in self.blocks:
+            for block in row:
+                block.set_pos_x(block.get_pos_x() + BLOCK_SIZE)
 
     def move_left(self):
         """Moves the piece to the left"""
         print("move piece to the left")
-        if not Platform.is_colliding_with_platform(self.blocks):
-            for row in self.blocks:
-                for block in row:
-                    block.set_pos_x(block.get_pos_x() - BLOCK_SIZE)
+        for row in self.blocks:
+            for block in row:
+                block.set_pos_x(block.get_pos_x() - BLOCK_SIZE)
 
     def rotate(self):
         """Rotates the piece"""
@@ -154,7 +152,30 @@ class PieceS(Piece):
         self.blocks[2][2].activate()
 
     def rotate(self):
-        pass
+        if self.rotation_stage == 0:
+            self.blocks[0][3].deactivate()
+            self.blocks[2][2].deactivate()
+            self.blocks[0][1].activate()
+            self.blocks[0][2].activate()
+            self.rotation_stage = 1
+        elif self.rotation_stage == 1:
+            self.blocks[0][1].deactivate()
+            self.blocks[1][3].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[2][1].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[0][2].deactivate()
+            self.blocks[2][1].deactivate()
+            self.blocks[2][2].activate()
+            self.blocks[2][3].activate()
+            self.rotation_stage = 3
+        elif self.rotation_stage == 3:
+            self.blocks[1][1].deactivate()
+            self.blocks[2][3].deactivate()
+            self.blocks[0][3].activate()
+            self.blocks[1][3].activate()
+            self.rotation_stage = 0
 
 class PieceZ(Piece):
     """Class for the piece Z"""
@@ -168,7 +189,30 @@ class PieceZ(Piece):
         self.blocks[2][3].activate()
 
     def rotate(self):
-        pass
+        if self.rotation_stage == 0:
+            self.blocks[1][3].deactivate()
+            self.blocks[2][3].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[0][3].activate()
+            self.rotation_stage = 1
+        elif self.rotation_stage == 1:
+            self.blocks[0][3].deactivate()
+            self.blocks[0][2].deactivate()
+            self.blocks[0][1].activate()
+            self.blocks[2][2].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[1][1].deactivate()
+            self.blocks[0][1].deactivate()
+            self.blocks[2][1].activate()
+            self.blocks[1][3].activate()
+            self.rotation_stage = 3
+        elif self.rotation_stage == 3:
+            self.blocks[2][1].deactivate()
+            self.blocks[2][2].deactivate()
+            self.blocks[0][2].activate()
+            self.blocks[2][3].activate()
+            self.rotation_stage = 0
 
 class PieceL(Piece):
     """Class for the piece L"""
@@ -180,10 +224,32 @@ class PieceL(Piece):
         self.blocks[0][2].activate()
         self.blocks[0][3].activate()
         self.blocks[1][3].activate()
-        self.blocks[1][1].activate()
 
     def rotate(self):
-        pass
+        if self.rotation_stage == 0:
+            self.blocks[0][3].deactivate()
+            self.blocks[1][3].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[2][1].activate()
+            self.rotation_stage = 1
+        elif self.rotation_stage == 1:
+            self.blocks[0][1].deactivate()
+            self.blocks[0][2].deactivate()
+            self.blocks[2][2].activate()
+            self.blocks[2][3].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[1][1].deactivate()
+            self.blocks[2][1].deactivate()
+            self.blocks[0][3].activate()
+            self.blocks[1][3].activate()
+            self.rotation_stage = 3
+        elif self.rotation_stage == 3:
+            self.blocks[2][2].deactivate()
+            self.blocks[2][3].deactivate()
+            self.blocks[0][1].activate()
+            self.blocks[0][2].activate()
+            self.rotation_stage = 0
 
 class PieceJ(Piece):
     """Class for the pieces L and J"""
@@ -322,9 +388,11 @@ class Platform(Canvas):
         self.after(DELAY, self.tick)
 
     def select_random_piece(self):
+        """Returns a random piece"""
+
         index = randint(0, len(PIECES_TYPE)-1)
         #piece_type = PIECES_TYPE[index]
-        piece_type = 'J'
+        piece_type = 'S'
         print("Piece Type : ", piece_type)
         if piece_type == 'O':
             return PieceO()
@@ -347,7 +415,6 @@ class Platform(Canvas):
         key = event.keysym
         if key == 'Right':
             self.current_piece.move_right()
-            pass
         elif key == 'Left':
             self.current_piece.move_left()
         elif key == 'Down':
@@ -386,14 +453,13 @@ class Platform(Canvas):
                             self.blocks[index_x][index_y].set_color(temp_color)
                             self.blocks[index_x][index_y].activate()
 
-    @staticmethod
-    def is_colliding_with_platform(blocks):
+    def is_colliding_with_platform(self, blocks):
         """Checks the blocks are colliding with the platform"""
         # TODO needs to be changed in the future
-        temp = blocks[-1:][0]
-        for block in temp:
-            if block.is_activated() and block.get_pos_y() + BLOCK_SIZE >= 18 * BLOCK_SIZE:
-                return True
+        for row in blocks:
+            for block in row:
+                if block.is_activated() and block.get_pos_y() + BLOCK_SIZE >= 18 * BLOCK_SIZE:
+                    return True
         return False
 
     def draw_current_piece(self):

@@ -17,7 +17,7 @@ blocks = \
         [0, 1, 0, 0]
     ]
 
-print(blocks[-1:][0])
+print(blocks)
 
 print(18*30)
 print(4*30)
