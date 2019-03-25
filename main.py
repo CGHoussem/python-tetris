@@ -3,13 +3,13 @@
     Author      : Houssem Ben Mabrouk (PxCode)
     Last edited : March 2019
 """
-from tkinter import Tk, Canvas, Frame, ALL, PhotoImage
-from random import choice, randint
+from random import choice
+from tkinter import Tk, Canvas, Frame, ALL, PhotoImage, NW
 
-PLATFORM_WIDTH = 300
+PLATFORM_WIDTH = 550
 PLATFORM_HEIGHT = 540
 BLOCK_SIZE = 30
-DELAY = 350
+DELAY = 1000
 
 def init_matrix(matrix_width, matrix_height, y_offset=0, x_offset=0):
     """initialize a 2 dimensional array"""
@@ -44,10 +44,11 @@ class Block:
         self.activated = False
         self.color = 'white'
 
-    def draw(self, canvas):
+    def draw(self, canvas, off_x=0, off_y=0):
         """draw a block"""
-        canvas.create_rectangle(self.pos_x, self.pos_y, self.pos_x+BLOCK_SIZE, \
-            self.pos_y+BLOCK_SIZE, fill=self.color)
+        canvas.create_rectangle(self.pos_x+off_x*BLOCK_SIZE, self.pos_y+off_y*BLOCK_SIZE,\
+            self.pos_x+off_x*BLOCK_SIZE+BLOCK_SIZE, self.pos_y+off_y*BLOCK_SIZE+BLOCK_SIZE,\
+                fill=self.color)
 
     def set_color(self, color):
         """Setter for the block color"""
@@ -99,14 +100,14 @@ class Piece:
         self.color = 'gray'
         self.rotation_stage = 0
 
-    def draw(self, canvas):
+    def draw(self, canvas, off_x=0, off_y=0):
         """draws the piece"""
         if self.blocks != None:
             for row in self.blocks:
                 for block in row:
                     if block.is_activated():
                         block.set_color(self.color)
-                        block.draw(canvas)
+                        block.draw(canvas, off_x, off_y)
 
     def gravity(self):
         """moves the piece down by one block"""
@@ -126,23 +127,46 @@ class Piece:
 
     def move_right(self):
         """Moves the piece to the right"""
-        print("move piece to the right")
+        temp = []
         for row in self.blocks:
             for block in row:
-                if block.get_pos_x() + BLOCK_SIZE < PLATFORM_WIDTH:
-                    block.set_pos_x(block.get_pos_x() + BLOCK_SIZE)
+                temp.append(block.get_pos_x())
+        max_x = max(temp)
+        can_move = True
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    if block.get_pos_x() == max_x and max_x + BLOCK_SIZE >= 300:
+                        can_move = False
+        if can_move:
+            for row in self.blocks:
+                for block in row:
+                    if block.get_pos_x() + BLOCK_SIZE < 300:
+                        block.set_pos_x(block.get_pos_x() + BLOCK_SIZE)
 
     def move_left(self):
         """Moves the piece to the left"""
-        print("move piece to the left")
+        temp = []
         for row in self.blocks:
             for block in row:
-                if block.get_pos_x() - BLOCK_SIZE >= 0:
-                    block.set_pos_x(block.get_pos_x() - BLOCK_SIZE)
+                temp.append(block.get_pos_x())
+        min_x = min(temp)
+        can_move = True
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    if block.get_pos_x() == min_x and min_x - BLOCK_SIZE < 0:
+                        can_move = False
+        if can_move:
+            for row in self.blocks:
+                for block in row:
+                    if block.get_pos_x() - BLOCK_SIZE >= 0:
+                        block.set_pos_x(block.get_pos_x() - BLOCK_SIZE)
 
     def rotate(self):
         """Rotates the piece"""
-        print("rotate piece")
+        # TODO: fix rotation flaw (it happens when we move the
+        # deactivated blocks out of the border)
         raise NotImplementedError
 
 class PieceS(Piece):
@@ -375,63 +399,90 @@ class PieceT(Piece):
 
 class Platform(Canvas):
     """Game Platform Class"""
-
     def __init__(self):
         super().__init__(width=PLATFORM_WIDTH, height=PLATFORM_HEIGHT, background='black')
 
-        self.init_game()
+        self.__init_game()
         self.pack()
 
-    def init_game(self):
+    def __init_game(self):
         """initializes the game"""
-
-        self.in_game = True
-        self.lines = 0
-        self.score = 0
-        self.current_piece = self.select_random_piece()
-        self.background = PhotoImage(file="bg.gif")
+        self.__in_game = True
+        self.__lines = 0
+        self.__score = 0
+        self.__level = 1
+        self.__current_piece = self.__select_random_piece()
+        self.__next_piece = self.__select_random_piece()
+        self.__background = PhotoImage(file="bg.gif")
         self.blocks = init_matrix(10, 18)
-        self.pieces_blocks = init_matrix(10, 18)
 
-        self.bind_all('<Key>', self.on_key_pressed)
+        self.bind_all('<Key>', self.__on_key_pressed)
         self.after(DELAY, self.tick)
 
-    def select_random_piece(self):
+    def __select_random_piece(self):
         """Returns a random piece"""
-        return choice(Tetris.PIECES)
-        
-    def on_key_pressed(self, event):
+        chosen_type = choice(Tetris.PIECE_TYPES)
+        if chosen_type == 'O':
+            return PieceO()
+        elif chosen_type == 'I':
+            return PieceI()
+        elif chosen_type == 'S':
+            return PieceS()
+        elif chosen_type == 'Z':
+            return PieceZ()
+        elif chosen_type == 'L':
+            return PieceL()
+        elif chosen_type == 'J':
+            return PieceJ()
+        elif chosen_type == 'T':
+            return PieceT()
+
+    def __on_key_pressed(self, event):
         """handles piece movement"""
         key = event.keysym
         if key == 'Right':
-            self.current_piece.move_right()
+            self.__current_piece.move_right()
         elif key == 'Left':
-            self.current_piece.move_left()
+            self.__current_piece.move_left()
         elif key == 'Down':
-            self.current_piece.drop()
+            self.__current_piece.drop()
         elif key == 'Up':
-            self.current_piece.rotate()
+            self.__current_piece.rotate()
         elif key == 'Escape':
             self.game_over()
 
     def tick(self):
         """creates a game cycle each timer event"""
-
-        if self.in_game:
-            self.draw_platform()
-            self.draw_current_piece()
-            if not self.is_colliding_with_platform(self.current_piece.get_blocks()):
-                self.current_piece.gravity()
+        if self.__in_game:
+            self.delete(ALL)
+            self.__draw_platform()
+            self.__draw_next_piece()
+            self.__draw_current_piece()
+            self.__draw_ui()
+            if not self.is_colliding_with_platform(self.__current_piece.get_blocks()):
+                self.__current_piece.gravity()
             else:
-                self.merge_current_piece()
-                self.current_piece = self.select_random_piece()
+                self.__merge_current_piece()
+                lines = self.__get_lines()
+                if lines != None:
+                    self.__break_lines(lines)
+                self.__current_piece = self.__next_piece
+                self.__next_piece = self.__select_random_piece()
             self.after(DELAY, self.tick)
         else:
             self.game_over()
 
-    def merge_current_piece(self):
+    def __get_lines(self):
+        # TODO: is_there_lines()
+        return None
+
+    def __break_lines(self, lines):
+        # TODO: break_lines()
+        pass
+
+    def __merge_current_piece(self):
         """Merges the current piece with the platform"""
-        temp = self.current_piece.get_blocks()
+        temp = self.__current_piece.get_blocks()
         for index_x, platform_row in enumerate(self.blocks):
             for index_y, platform_block in enumerate(platform_row):
                 for index2_x, piece_row in enumerate(temp):
@@ -445,7 +496,6 @@ class Platform(Canvas):
 
     def is_colliding_with_platform(self, blocks):
         """Checks the blocks are colliding with the platform"""
-        # TODO optimization
         # Collision with the bottom of the platform
         for row in blocks:
             for block in row:
@@ -462,18 +512,34 @@ class Platform(Canvas):
                                 return True
         return False
 
-    def draw_current_piece(self):
+    def __draw_current_piece(self):
         """draws the current piece"""
-        if self.current_piece != None:
-            self.current_piece.draw(self)
+        if self.__current_piece != None:
+            self.__current_piece.draw(self)
 
-    def draw_platform(self):
+    def __draw_next_piece(self):
+        """draws the next piece"""
+        if isinstance(self.__next_piece, (PieceI, PieceL, PieceJ, PieceT)):
+            self.__next_piece.draw(self, 13, 13)
+        elif isinstance(self.__next_piece, (PieceS, PieceZ, PieceO)):
+            self.__next_piece.draw(self, 12, 14)
+
+    def __draw_platform(self):
         """draws the platform"""
-        self.delete('all')
+        self.create_image(0, 0, anchor=NW, image=self.__background)
         for row in self.blocks:
             for block in row:
                 if block.is_activated():
                     block.draw(self)
+
+    def __draw_ui(self):
+        """draws the ui (score, level, lines)"""
+        self.create_text(425, 117, text='{}'.format(self.__score),\
+            fill='white', font=('Game Over', 50))
+        self.create_text(454, 332, text='{}'.format(self.__lines),\
+            fill='white', font=('Game Over', 50))
+        self.create_text(454, 240, text='{}'.format(self.__level),\
+            fill='white', font=('Game Over', 50))
 
     def tutorial(self):
         """draws the screen of the tutorial"""
@@ -487,19 +553,17 @@ class Platform(Canvas):
 
         self.delete(ALL)
         self.create_text(self.winfo_width()/2, self.winfo_height()/2, \
-            text='Game Over avec score {}'.format(self.score), fill='white')
-        self.after(DELAY, self.exit_game)
+            text='Game Over avec score {}'.format(self.__score), fill='white')
+        self.after(3000, self.exit_game)
 
     def exit_game(self):
         """exists the game"""
-
         exit(0)
 
 class Tetris(Frame):
     """Main Tetris Class"""
-
-    PIECES = [PieceO(), PieceI(), PieceS(), PieceZ(), PieceL(), PieceJ(), PieceT()]
-
+    PIECE_TYPES = ['O', 'I', 'S', 'Z', 'L', 'J', 'T']
+    # TODO: add custom font
     def __init__(self):
         super().__init__()
 
@@ -514,4 +578,5 @@ def main():
     tetris_game = Tetris()
     root.mainloop()
 
-main()
+if __name__ == '__main__':
+    main()
