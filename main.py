@@ -105,6 +105,12 @@ class Block:
         """Setter Pos Y"""
         self.pos_y = pos_y
 
+    def __str__(self):
+        if self.activate:
+            return '1'
+        else:
+            return '0'
+
 class Piece:
     """Piece Structure Class"""
 
@@ -135,17 +141,13 @@ class Piece:
                 for block in row:
                     block.set_pos_y(block.get_pos_y() + Tetris.BLOCK_SIZE)
 
-    def drop(self):
-        """drops the piece"""
-        if self.blocks != None:
-            pass
-
     def get_blocks(self):
         """Getter for the piece blocks"""
         return self.blocks
 
     def move_right(self):
         """Moves the piece to the right"""
+        # TODO: Missing conditions
         temp = []
         for row in self.blocks:
             for block in row:
@@ -165,6 +167,7 @@ class Piece:
 
     def move_left(self):
         """Moves the piece to the left"""
+        # TODO: Missing conditions
         temp = []
         for row in self.blocks:
             for block in row:
@@ -184,7 +187,7 @@ class Piece:
 
     def rotate(self):
         """Rotates the piece"""
-        # TODO: fix rotation flaw (it happens when we move the
+       # TODO: fix rotation flaw (it happens when we move the
         # deactivated blocks out of the border)
         raise NotImplementedError
 
@@ -386,7 +389,6 @@ class PieceI(Piece):
             self.blocks[1][0].activate()
             self.blocks[2][0].activate()
             self.rotation_stage = 0
-        debug_print(self.blocks)
 
 class PieceT(Piece):
     """Class for the piece T"""
@@ -422,7 +424,7 @@ class Platform(Canvas):
     def __init__(self, player):
         super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT,\
             background='black')
-
+        self.focus_set()
         self.__init_game(player)
         self.pack()
 
@@ -438,7 +440,7 @@ class Platform(Canvas):
         self.blocks = init_matrix(10, 18)
 
         self.bind_all('<Key>', self.__on_key_pressed)
-        self.__current_job = self.after(Tetris.DELAY, self.tick)
+        self.__current_job = self.after(Tetris.DELAY, self.__tick)
 
     def __select_random_piece(self):
         """Returns a random piece"""
@@ -465,14 +467,12 @@ class Platform(Canvas):
             self.__current_piece.move_right()
         elif key == 'Left':
             self.__current_piece.move_left()
-        elif key == 'Down':
-            self.__current_piece.drop()
         elif key == 'Up':
             self.__current_piece.rotate()
         elif key == 'Escape':
             self.game_over()
 
-    def tick(self):
+    def __tick(self):
         """creates a game cycle each timer event"""
         if self.__in_game:
             self.delete(ALL)
@@ -484,26 +484,26 @@ class Platform(Canvas):
                 self.__current_piece.gravity()
             else:
                 self.__merge_current_piece()
-                lines = self.__get_lines()
-                if lines != None:
-                    self.__lines += len(lines)
+                temp_lines = self.__get_lines()
+                if len(temp_lines) > 0:
+                    self.__lines += len(temp_lines)
+                    # Leveling Up
                     temp = self.__lines // 10
                     if temp >= 1 and temp != self.__level:
                         self.__level = self.__lines // 10
-                        Tetris.DELAY = clamp(Tetris.DELAY - 150, 100, Tetris.DELAY)
-                    self.__break_lines(lines)
+                        Tetris.DELAY = clamp(Tetris.DELAY - 100, 100, Tetris.DELAY)
+                    self.__break_lines(temp_lines)
+                    temp_lines.clear()
                 self.__current_piece = self.__next_piece
                 self.__next_piece = self.__select_random_piece()
-            self.__current_job = self.after(Tetris.DELAY, self.tick)
+            self.__current_job = self.after(Tetris.DELAY, self.__tick)
         else:
             self.game_over()
 
     def __get_lines(self):
-        row_index = 0
         lines = []
         for row in self.blocks:
             count = 0
-            row_index += 1
             for block in row:
                 if block.is_activated():
                     count += 1
@@ -514,6 +514,7 @@ class Platform(Canvas):
         return lines
 
     def __break_lines(self, lines):
+        """Breaking the lines and dropping the other blocks by how many blocks broken"""
         lines_sum = len(lines)
 
         # Rewarding the player
@@ -527,27 +528,31 @@ class Platform(Canvas):
         elif lines_sum == 4:
             self.__player.add_score(1200 * self.__level)
 
-        # Breaking the lines
+        # Breaking lines
         for row in lines:
             for block in row:
                 block.deactivate()
 
         # Dropping the hanging blocks
-        # TODO: dropping the hanging blocks
+        for reversed_y_index, row in enumerate(reversed(self.blocks)):
+            for x_index, block in enumerate(row):
+                if block.is_activated() and 17-reversed_y_index + lines_sum <= 17:
+                    temp_b = Block()
+                    temp_b.deactivate()
+                    temp_b.set_pos_x(x_index)
+                    temp_b.set_pos_y(17-reversed_y_index)
+                    block.set_pos_y(block.get_pos_y() + Tetris.BLOCK_SIZE * lines_sum)
+                    self.blocks[17-reversed_y_index + lines_sum][x_index] = block
+                    self.blocks[17-reversed_y_index][x_index] = temp_b
 
     def __merge_current_piece(self):
         """Merges the current piece with the platform"""
-        temp = self.__current_piece.get_blocks()
-        for index_y, platform_row in enumerate(self.blocks):
-            for index_x, platform_block in enumerate(platform_row):
-                for index2_y, piece_row in enumerate(temp):
-                    for index2_x, piece_block in enumerate(piece_row):
-                        if piece_block.is_activated() and\
-                        piece_block.get_pos_x() == platform_block.get_pos_x() and\
-                        piece_block.get_pos_y() == platform_block.get_pos_y():
-                            temp_color = temp[index2_y][index2_x].get_color()
-                            self.blocks[index_y][index_x].set_color(temp_color)
-                            self.blocks[index_y][index_x].activate()
+        for row in self.__current_piece.get_blocks():
+            for block in row:
+                if block.is_activated():
+                    x_index = block.get_pos_x() // Tetris.BLOCK_SIZE
+                    y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
+                    self.blocks[y_index][x_index] = block
 
     def __is_colliding_with_platform(self, blocks):
         """Checks the blocks are colliding with the platform"""
@@ -562,9 +567,9 @@ class Platform(Canvas):
                 for piece_row in blocks:
                     for piece_block in piece_row:
                         if platform_block.is_activated() and piece_block.is_activated()\
-                        and platform_block.get_pos_x() == piece_block.get_pos_x()\
-                        and platform_block.get_pos_y() == piece_block.get_pos_y() + Tetris.BLOCK_SIZE:
-                            return True
+                            and platform_block.get_pos_x() == piece_block.get_pos_x()\
+                                and platform_block.get_pos_y() == piece_block.get_pos_y() + Tetris.BLOCK_SIZE:
+                                return True
         return False
 
     def __draw_current_piece(self):
@@ -623,7 +628,7 @@ class Tetris(Frame):
     PLATFORM_WIDTH = 550
     PLATFORM_HEIGHT = 540
     BLOCK_SIZE = 30
-    DELAY = 300
+    DELAY = 200
 
     # TODO: add custom font
     def __init__(self, player_name):
@@ -644,6 +649,16 @@ def main():
 def debug_print(matrix):
     """Debug function"""
     for row in matrix:
+        for col in row:
+            if col.is_activated():
+                print('1 ', end='')
+            else:
+                print('0 ', end='')
+        print()
+
+def debug_print_reversed(matrix):
+    """Debug function"""
+    for row in reversed(matrix):
         for col in row:
             if col.is_activated():
                 print('1 ', end='')

@@ -17,7 +17,6 @@ blocks = \
         [0, 1, 0, 0]
     ]
 
-print(blocks)
 
-print(18*30)
-print(4*30)
+for x, row in enumerate(reversed(blocks)):
+    print(3 - x)
