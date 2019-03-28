@@ -7,6 +7,8 @@ from random import choice
 from tkinter import Tk, Canvas, Frame, ALL, PhotoImage, NW
 
 # MATRIX[Y COORDINATE][X COORDINATE]
+# TODO : FIX LINE BREAKING SHIT.. -_-
+# TODO : ADD CEILING LIMIT (GAME OVER ..)
 
 def init_matrix(matrix_width, matrix_height, y_offset=0, x_offset=0):
     """initialize a 2 dimensional array"""
@@ -145,51 +147,68 @@ class Piece:
         """Getter for the piece blocks"""
         return self.blocks
 
-    def move_right(self):
+    def move_right(self, platform_blocks):
         """Moves the piece to the right"""
-        # TODO: Missing conditions
+        # Checking for the platform limits
         temp = []
         for row in self.blocks:
             for block in row:
-                temp.append(block.get_pos_x())
-        max_x = max(temp)
-        can_move = True
-        for row in self.blocks:
-            for block in row:
                 if block.is_activated():
-                    if block.get_pos_x() == max_x and max_x + Tetris.BLOCK_SIZE >= 300:
-                        can_move = False
-        if can_move:
-            for row in self.blocks:
-                for block in row:
-                    if block.get_pos_x() + Tetris.BLOCK_SIZE < 300:
+                    temp.append(block.get_pos_x())
+        max_x = max(temp)
+        if max_x + Tetris.BLOCK_SIZE < Tetris.COLS * Tetris.BLOCK_SIZE:
+             # Checking for the platform blocks
+            x_index, y_index = self.__get_righty()
+            x_index //= Tetris.BLOCK_SIZE
+            y_index //= Tetris.BLOCK_SIZE
+            if not platform_blocks[y_index][x_index + 1].is_activated():
+                for row in self.blocks:
+                    for block in row:
                         block.set_pos_x(block.get_pos_x() + Tetris.BLOCK_SIZE)
 
-    def move_left(self):
+    def move_left(self, platform_blocks):
         """Moves the piece to the left"""
-        # TODO: Missing conditions
+        # Checking for the platform limits
         temp = []
         for row in self.blocks:
             for block in row:
-                temp.append(block.get_pos_x())
-        min_x = min(temp)
-        can_move = True
-        for row in self.blocks:
-            for block in row:
                 if block.is_activated():
-                    if block.get_pos_x() == min_x and min_x - Tetris.BLOCK_SIZE < 0:
-                        can_move = False
-        if can_move:
-            for row in self.blocks:
-                for block in row:
-                    if block.get_pos_x() - Tetris.BLOCK_SIZE >= 0:
-                        block.set_pos_x(block.get_pos_x() - Tetris.BLOCK_SIZE)
+                    temp.append(block.get_pos_x())
+        min_x = min(temp)
+        if min_x - Tetris.BLOCK_SIZE >= 0:
+            # Checking for the platform blocks
+            x_index, y_index = self.__get_lefty()
+            x_index //= Tetris.BLOCK_SIZE
+            y_index //= Tetris.BLOCK_SIZE
+            if not platform_blocks[y_index][x_index - 1].is_activated():
+                for row in self.blocks:
+                    for block in row:
+                        if block.get_pos_x() - Tetris.BLOCK_SIZE >= 0:
+                            block.set_pos_x(block.get_pos_x() - Tetris.BLOCK_SIZE)
 
     def rotate(self):
         """Rotates the piece"""
        # TODO: fix rotation flaw (it happens when we move the
         # deactivated blocks out of the border)
         raise NotImplementedError
+
+    def __get_lefty(self):
+        temp = {}
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    temp[block.get_pos_x()] = block.get_pos_y()
+
+        return (min(temp), temp[min(temp)])
+
+    def __get_righty(self):
+        temp = {}
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    temp[block.get_pos_x()] = block.get_pos_y()
+
+        return (max(temp), temp[max(temp)])
 
 class PieceS(Piece):
     """Class for the piece S"""
@@ -422,8 +441,8 @@ class PieceT(Piece):
 class Platform(Canvas):
     """Game Platform Class"""
     def __init__(self, player):
-        super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT,\
-            background='black')
+        super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT\
+            , background='black')
         self.focus_set()
         self.__init_game(player)
         self.pack()
@@ -437,7 +456,7 @@ class Platform(Canvas):
         self.__current_piece = self.__select_random_piece()
         self.__next_piece = self.__select_random_piece()
         self.__background = PhotoImage(file="bg.gif")
-        self.blocks = init_matrix(10, 18)
+        self.blocks = init_matrix(Tetris.COLS, Tetris.ROWS)
 
         self.bind_all('<Key>', self.__on_key_pressed)
         self.__current_job = self.after(Tetris.DELAY, self.__tick)
@@ -464,9 +483,9 @@ class Platform(Canvas):
         """handles piece movement"""
         key = event.keysym
         if key == 'Right':
-            self.__current_piece.move_right()
+            self.__current_piece.move_right(self.blocks)
         elif key == 'Left':
-            self.__current_piece.move_left()
+            self.__current_piece.move_left(self.blocks)
         elif key == 'Up':
             self.__current_piece.rotate()
         elif key == 'Escape':
@@ -480,25 +499,36 @@ class Platform(Canvas):
             self.__draw_current_piece()
             self.__draw_ui()
 
-            if not self.__is_colliding_with_platform(self.__current_piece.get_blocks()):
+            # Checking if the current piece is colliding with the platform
+            if not self.__is_colliding_with_platform():
+                # Moving down the current piece by one block
                 self.__current_piece.gravity()
             else:
+                # Merging the current piece with the platform
                 self.__merge_current_piece()
+                # Searching for completed lines
                 temp_lines = self.__get_lines()
                 if len(temp_lines) > 0:
                     self.__lines += len(temp_lines)
-                    # Leveling Up
-                    temp = self.__lines // 10
-                    if temp >= 1 and temp != self.__level:
-                        self.__level = self.__lines // 10
-                        Tetris.DELAY = clamp(Tetris.DELAY - 100, 100, Tetris.DELAY)
+                    # Clearing the lines
                     self.__break_lines(temp_lines)
                     temp_lines.clear()
+                    # Leveling UP
+                    self.__level_up()
+                # Setting the current piece and generating a new next piece
                 self.__current_piece = self.__next_piece
                 self.__next_piece = self.__select_random_piece()
+            # Looping the 'tick' function
             self.__current_job = self.after(Tetris.DELAY, self.__tick)
         else:
             self.game_over()
+
+    def __level_up(self):
+        """ Checking for level up, if so levels up the player"""
+        temp = self.__lines // Tetris.COLS
+        if temp >= 1 and temp != self.__level:
+            self.__level = self.__lines // Tetris.COLS
+            Tetris.DELAY = clamp(Tetris.DELAY - 100, 100, Tetris.DELAY)
 
     def __get_lines(self):
         lines = []
@@ -509,7 +539,7 @@ class Platform(Canvas):
                     count += 1
                 else:
                     break
-            if count == 10:
+            if count == Tetris.COLS:
                 lines.append(row)
         return lines
 
@@ -554,22 +584,16 @@ class Platform(Canvas):
                     y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
                     self.blocks[y_index][x_index] = block
 
-    def __is_colliding_with_platform(self, blocks):
+    def __is_colliding_with_platform(self):
         """Checks the blocks are colliding with the platform"""
-        # Collision with the bottom of the platform
-        for row in blocks:
+        # Collision Detection
+        for row in self.__current_piece.get_blocks():
             for block in row:
-                if block.is_activated() and block.get_pos_y() + Tetris.BLOCK_SIZE >= 18 * Tetris.BLOCK_SIZE:
-                    return True
-        # Collision with the activated blocks of the platform
-        for platform_row in self.blocks:
-            for platform_block in platform_row:
-                for piece_row in blocks:
-                    for piece_block in piece_row:
-                        if platform_block.is_activated() and piece_block.is_activated()\
-                            and platform_block.get_pos_x() == piece_block.get_pos_x()\
-                                and platform_block.get_pos_y() == piece_block.get_pos_y() + Tetris.BLOCK_SIZE:
-                                return True
+                if block.is_activated():
+                    x_index = block.get_pos_x() // Tetris.BLOCK_SIZE
+                    y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
+                    if y_index + 1 >= Tetris.ROWS or self.blocks[y_index+1][x_index].is_activated():
+                        return True
         return False
 
     def __draw_current_piece(self):
@@ -593,8 +617,10 @@ class Platform(Canvas):
                     block.draw(self)
 
     def __draw_ui(self):
-        """draws the ui (next_piece, score, level, lines)"""
+        """draws the ui (next_piece, player name, score, level, lines)"""
         self.__draw_next_piece()
+        self.create_text(425, 10, text='{}'.format(self.__player.get_player_name()),\
+            fill='white', font=('Game Over', 50))
         self.create_text(425, 117, text='{}'.format(self.__player.get_score()),\
             fill='white', font=('Game Over', 50))
         self.create_text(454, 332, text='{}'.format(self.__lines),\
@@ -627,10 +653,12 @@ class Tetris(Frame):
     PIECE_TYPES = ['O', 'I', 'S', 'Z', 'L', 'J', 'T']
     PLATFORM_WIDTH = 550
     PLATFORM_HEIGHT = 540
+    ROWS = 18
+    COLS = 10
     BLOCK_SIZE = 30
     DELAY = 200
 
-    # TODO: add custom font
+    # TODO: importing custom font
     def __init__(self, player_name):
         super().__init__()
 
@@ -642,7 +670,11 @@ def main():
     """Main Game Function"""
     root = Tk()
     root.resizable(False, False)
-    player_name = input("Enter your name: ")
+    size = 0
+    while size < 3:
+        player_name = input("ENTER YOUR NAME: ")
+        size = len(player_name)
+    player_name = player_name.upper()
     tetris_game = Tetris(player_name)
     root.mainloop()
 
