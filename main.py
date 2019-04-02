@@ -4,11 +4,11 @@
     Last edited : March 2019
 """
 from random import choice
-from tkinter import Tk, Canvas, Frame, ALL, PhotoImage, NW
+from tkinter import Tk, Canvas, Frame, ALL, PhotoImage, NW, NE, Entry, Button
+from sys import exit
 
 # MATRIX[Y COORDINATE][X COORDINATE]
-# TODO : FIX LINE BREAKING SHIT.. -_-
-# TODO : ADD CEILING LIMIT (GAME OVER ..)
+# TODO : FIX ROTATION NEXT TO BORDERS
 
 def init_matrix(matrix_width, matrix_height, y_offset=0, x_offset=0):
     """initialize a 2 dimensional array"""
@@ -188,8 +188,6 @@ class Piece:
 
     def rotate(self):
         """Rotates the piece"""
-       # TODO: fix rotation flaw (it happens when we move the
-        # deactivated blocks out of the border)
         raise NotImplementedError
 
     def __get_lefty(self):
@@ -449,17 +447,20 @@ class Platform(Canvas):
 
     def __init_game(self, player):
         """initializes the game"""
+        self.__in_tutorial = True
         self.__in_game = True
+        self.__in_menu = False
         self.__player = player
         self.__lines = 0
         self.__level = 1
         self.__current_piece = self.__select_random_piece()
         self.__next_piece = self.__select_random_piece()
         self.__background = PhotoImage(file="bg.gif")
+        self.__tutorial = PhotoImage(file="tutorial.gif")
+        self.__game_over = PhotoImage(file="game_over.gif")
         self.blocks = init_matrix(Tetris.COLS, Tetris.ROWS)
-
         self.bind_all('<Key>', self.__on_key_pressed)
-        self.__current_job = self.after(Tetris.DELAY, self.__tick)
+        self.tutorial()
 
     def __select_random_piece(self):
         """Returns a random piece"""
@@ -489,7 +490,18 @@ class Platform(Canvas):
         elif key == 'Up':
             self.__current_piece.rotate()
         elif key == 'Escape':
-            self.game_over()
+            if not self.__in_tutorial:
+                self.game_over()
+        elif key == 'Return':
+            self.after_cancel(self.__current_job)
+            if self.__in_tutorial:
+                self.__in_tutorial = False
+                self.__in_menu = False
+                self.__current_job = self.after(Tetris.DELAY, self.__tick)
+            elif not self.__in_game and not self.__in_menu:
+                self.destroy()
+                self.__in_menu = True
+                Menu(self.__player.get_player_name())
 
     def __tick(self):
         """creates a game cycle each timer event"""
@@ -504,6 +516,9 @@ class Platform(Canvas):
                 # Moving down the current piece by one block
                 self.__current_piece.gravity()
             else:
+                # Checking if the current piece is on the top limit
+                if self.__check_game_over():
+                    self.game_over()
                 # Merging the current piece with the platform
                 self.__merge_current_piece()
                 # Searching for completed lines
@@ -525,10 +540,10 @@ class Platform(Canvas):
 
     def __level_up(self):
         """ Checking for level up, if so levels up the player"""
-        temp = self.__lines // Tetris.COLS
-        if temp >= 1 and temp != self.__level:
-            self.__level = self.__lines // Tetris.COLS
-            Tetris.DELAY = clamp(Tetris.DELAY - 100, 100, Tetris.DELAY)
+        temp = self.__lines // Tetris.LINES_LEVEL_UP
+        if temp >= 1 and temp + 1 != self.__level:
+            self.__level = (self.__lines // Tetris.LINES_LEVEL_UP) + 1
+            Tetris.DELAY = clamp(Tetris.DELAY - 50, 100, Tetris.DELAY)
 
     def __get_lines(self):
         lines = []
@@ -558,22 +573,26 @@ class Platform(Canvas):
         elif lines_sum == 4:
             self.__player.add_score(1200 * self.__level)
 
-        # Breaking lines
+        # Deactiving the lines
+        temp = []
         for row in lines:
             for block in row:
+                temp.append(block.get_pos_y())
                 block.deactivate()
+        min_y_index = (min(temp)-1) // Tetris.BLOCK_SIZE
 
         # Dropping the hanging blocks
-        for reversed_y_index, row in enumerate(reversed(self.blocks)):
-            for x_index, block in enumerate(row):
-                if block.is_activated() and 17-reversed_y_index + lines_sum <= 17:
+        for y_index in range(Tetris.ROWS-1-lines_sum, -1, -1):
+            for x_index in range(Tetris.COLS-1, -1, -1):
+                block = self.blocks[y_index][x_index]
+                if y_index <= min_y_index and block.is_activated():
                     temp_b = Block()
                     temp_b.deactivate()
                     temp_b.set_pos_x(x_index)
-                    temp_b.set_pos_y(17-reversed_y_index)
+                    temp_b.set_pos_y(y_index)
                     block.set_pos_y(block.get_pos_y() + Tetris.BLOCK_SIZE * lines_sum)
-                    self.blocks[17-reversed_y_index + lines_sum][x_index] = block
-                    self.blocks[17-reversed_y_index][x_index] = temp_b
+                    self.blocks[y_index + lines_sum][x_index] = block
+                    self.blocks[y_index][x_index] = temp_b
 
     def __merge_current_piece(self):
         """Merges the current piece with the platform"""
@@ -583,6 +602,17 @@ class Platform(Canvas):
                     x_index = block.get_pos_x() // Tetris.BLOCK_SIZE
                     y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
                     self.blocks[y_index][x_index] = block
+
+    def __check_game_over(self):
+        """Checks if the spawned piece is overlapping on another piece"""
+        for row in self.__current_piece.get_blocks():
+            for block in row:
+                if block.is_activated():
+                    x_index = block.get_pos_x() // Tetris.BLOCK_SIZE
+                    y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
+                    if self.blocks[y_index][x_index].is_activated():
+                        return True
+        return False
 
     def __is_colliding_with_platform(self):
         """Checks the blocks are colliding with the platform"""
@@ -620,50 +650,84 @@ class Platform(Canvas):
         """draws the ui (next_piece, player name, score, level, lines)"""
         self.__draw_next_piece()
         self.create_text(425, 10, text='{}'.format(self.__player.get_player_name()),\
-            fill='white', font=('Game Over', 50))
+            fill='white', font=('Arial', 10))
         self.create_text(425, 117, text='{}'.format(self.__player.get_score()),\
-            fill='white', font=('Game Over', 50))
+            fill='white', font=('Arial', 15))
         self.create_text(454, 332, text='{}'.format(self.__lines),\
-            fill='white', font=('Game Over', 50))
+            fill='white', font=('Arial', 15))
         self.create_text(454, 240, text='{}'.format(self.__level),\
-            fill='white', font=('Game Over', 50))
+            fill='white', font=('Arial', 15))
 
     def tutorial(self):
         """draws the screen of the tutorial"""
-        self.create_text(self.winfo_width()/2, self.winfo_height()/2, \
-            text='Fléche gauche : Pousser la piéce à gauche\n\
-                Fléche droite : Pousser la piéce à droite\n\
-                    ', fill='white')
+        self.delete(ALL)
+        self.create_image(0, 0, anchor=NW, image=self.__tutorial)
+        self.__current_job = self.after(1000, self.tutorial)
 
     def game_over(self):
-        """deletes all objects and draws game over message"""
-        self.after_cancel(self.__current_job)
+        """Deletes all objects and draw end game information"""
+        self.__in_game = False
         self.delete(ALL)
-        self.create_text(self.winfo_width()/2, self.winfo_height()/2, \
-            text='Game Over avec score {}'.format(self.__player.get_score()),\
-                fill='white', font=('Game Over', 60))
-        self.__current_job = self.after(3000, self.exit_game)
+        self.after_cancel(self.__current_job)
+        self.create_image(0, 0, anchor=NW, image=self.__game_over)
+        self.create_text(275, 162+50, text='Joueur: {}'.format(self.__player.get_player_name()),\
+            fill='white', font=('Arial', 15))
+        self.create_text(275, 162+50*2, text='Niveau: {}'.format(self.__level),\
+            fill='white', font=('Arial', 15))
+        self.create_text(275, 162+50*3, text='Score: {}'.format(self.__player.get_score()),\
+            fill='white', font=('Arial', 15))
+        self.__current_job = self.after(1000, self.game_over)
 
-    def exit_game(self):
-        """exists the game"""
-        exit(0)
+class Menu(Canvas):
+    """Menu Canvas"""
+    def __init__(self, player_name):
+        super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT\
+            , background='black')
+        self.player_name = player_name
+        self.__background = PhotoImage(file='home.gif')
+        self.__play_btn_img = PhotoImage(file='play_btn.gif')
+        self.__exit_btn_img = PhotoImage(file='exit_btn.gif')
+        self.focus_set()
+        self.__init_menu()
+
+        self.pack()
+
+    def __init_menu(self):
+        self.create_image(0, 0, anchor=NW, image=self.__background)
+        self.__draw_buttons()
+
+    def __draw_buttons(self):
+        play_btn = Button(self, command=self.__play_game)
+        play_btn.config(image=self.__play_btn_img, width=296, height=77, bd=0,\
+            bg='black', activebackground='black')
+        play_btn.place(relx=1, x=-127, y=201, anchor=NE)
+
+        exit_btn = Button(self, command=exit)
+        exit_btn.config(image=self.__exit_btn_img, width=296, height=77, bd=0,\
+            bg='black', activebackground='black')
+        exit_btn.place(relx=1, x=-127, y=322, anchor=NE)
+
+    def __play_game(self):
+        self.delete(ALL)
+        self.destroy()
+        Platform(Player(self.player_name))
 
 class Tetris(Frame):
     """Main Tetris Class"""
     PIECE_TYPES = ['O', 'I', 'S', 'Z', 'L', 'J', 'T']
     PLATFORM_WIDTH = 550
     PLATFORM_HEIGHT = 540
+    LINES_LEVEL_UP = 4 # Chaque 4 ligne le joueur gagne un niveau
     ROWS = 18
     COLS = 10
     BLOCK_SIZE = 30
-    DELAY = 200
+    DELAY = 300
 
-    # TODO: importing custom font
     def __init__(self, player_name):
         super().__init__()
 
         self.master.title('Tetris - Houssem')
-        self.platform = Platform(Player(player_name))
+        self.menu = Menu(player_name)
         self.pack()
 
 def main():
