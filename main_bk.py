@@ -1,11 +1,14 @@
 """
     Title       : Tetris Game
     Author      : Houssem Ben Mabrouk (PxCode)
-    Last edited : Avril 2019
+    Last edited : March 2019
 """
 from random import choice
+from tkinter import Tk, Canvas, Frame, ALL, PhotoImage, NW, NE, Entry, Button
 from sys import exit
-from tkinter import ALL, NE, NW, Button, Canvas, Entry, Frame, PhotoImage, Tk
+
+# MATRIX[Y COORDINATE][X COORDINATE]
+# TODO : FIX ROTATION NEXT TO BORDERS
 
 def init_matrix(matrix_width, matrix_height, y_offset=0, x_offset=0):
     """initialize a 2 dimensional array"""
@@ -23,9 +26,9 @@ def init_matrix(matrix_width, matrix_height, y_offset=0, x_offset=0):
 def clamp(value, min_val, max_val):
     """clamp a value"""
 
-    if value <= min_val:
+    if value < min_val:
         return min_val
-    if value >= max_val:
+    if value > max_val:
         return  max_val
     return value
 
@@ -144,50 +147,59 @@ class Piece:
         """Getter for the piece blocks"""
         return self.blocks
 
-    def __get_block_coords(self, block):
-        """Returns normalized coordinates"""
-        return (block.get_pos_x() // Tetris.BLOCK_SIZE, block.get_pos_y() // Tetris.BLOCK_SIZE)
-
-    def check_movement(self, direction, platform_blocks=None):
-        """Checking if movement is safe or not"""
+    def move_right(self, platform_blocks):
+        """Moves the piece to the right"""
+        # Checking for the platform limits
+        temp = []
         for row in self.blocks:
             for block in row:
                 if block.is_activated():
-                    j, i = self.__get_block_coords(block)
-                    if direction == -1:
-                        temp = block.get_pos_x() - Tetris.BLOCK_SIZE
-                        if temp < 0:
-                            return False
-                        if platform_blocks != None:
-                            if platform_blocks[i][j-1].is_activated():
-                                return False
-                    elif direction == 1:
-                        temp = block.get_pos_x() + Tetris.BLOCK_SIZE
-                        if temp >= 300:
-                            return False
-                        if platform_blocks != None:
-                            if platform_blocks[i][j+1].is_activated():
-                                return False
-        return True
-
-    def move_right(self, platform_blocks=None):
-        """Moves the piece to the right"""
-        if self.check_movement(1, platform_blocks):
-            for row in self.blocks:
-                for block in row:
-                    block.set_pos_x(block.get_pos_x() + Tetris.BLOCK_SIZE)
+                    temp.append(block.get_pos_x())
+        max_x = max(temp)
+        if max_x + Tetris.BLOCK_SIZE < Tetris.COLS * Tetris.BLOCK_SIZE:
+             # Checking for the platform blocks
+            x_index, y_index = self.__get_righty()
+            x_index //= Tetris.BLOCK_SIZE
+            y_index //= Tetris.BLOCK_SIZE
+            if not platform_blocks[y_index][x_index + 1].is_activated():
+                for row in self.blocks:
+                    for block in row:
+                        block.set_pos_x(block.get_pos_x() + Tetris.BLOCK_SIZE)
 
     def move_left(self, platform_blocks):
         """Moves the piece to the left"""
-        if self.check_movement(-1, platform_blocks):
-            for row in self.blocks:
-                for block in row:
-                    block.set_pos_x(block.get_pos_x() - Tetris.BLOCK_SIZE)
+        # Checking for the platform limits
+        temp = []
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    temp.append(block.get_pos_x())
+        min_x = min(temp)
+        if min_x - Tetris.BLOCK_SIZE >= 0:
+            # Checking for the platform blocks
+            x_index, y_index = self.__get_lefty()
+            x_index //= Tetris.BLOCK_SIZE
+            y_index //= Tetris.BLOCK_SIZE
+            if not platform_blocks[y_index][x_index - 1].is_activated():
+                for row in self.blocks:
+                    for block in row:
+                        if block.get_pos_x() - Tetris.BLOCK_SIZE >= 0:
+                            block.set_pos_x(block.get_pos_x() - Tetris.BLOCK_SIZE)
 
-    def rotate(self, rotation_stage=None):
+    def rotate(self):
         """Rotates the piece"""
         raise NotImplementedError
 
+    def __get_lefty(self):
+        temp = {}
+        for row in self.blocks:
+            for block in row:
+                if block.is_activated():
+                    temp[block.get_pos_x()] = block.get_pos_y()
+
+        return (min(temp), temp[min(temp)])
+
+    def __get_righty(self):
         temp = {}
         for row in self.blocks:
             for block in row:
@@ -202,27 +214,36 @@ class PieceS(Piece):
     def __init__(self):
         super().__init__('S')
         self.color = 'red'
-        self.blocks[1][2].activate() # Pivot Point
+        self.blocks[3][0].activate()
         self.blocks[2][1].activate()
+        self.blocks[3][1].activate()
         self.blocks[2][2].activate()
-        self.blocks[1][3].activate()
 
-    def rotate(self, rotation_stage=None):
-        if rotation_stage != None:
-            self.rotation_stage = rotation_stage
+    def rotate(self):
         if self.rotation_stage == 0:
-            self.blocks[2][1].deactivate()
+            self.blocks[3][0].deactivate()
             self.blocks[2][2].deactivate()
-            self.blocks[0][2].activate()
-            self.blocks[2][3].activate()
+            self.blocks[1][0].activate()
+            self.blocks[2][0].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1):
-                self.blocks[2][3].deactivate()
-                self.blocks[0][2].deactivate()
-                self.blocks[2][1].activate()
-                self.blocks[2][2].activate()
-                self.rotation_stage = 0
+            self.blocks[1][0].deactivate()
+            self.blocks[3][1].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[1][2].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[2][0].deactivate()
+            self.blocks[1][2].deactivate()
+            self.blocks[2][2].activate()
+            self.blocks[3][2].activate()
+            self.rotation_stage = 3
+        elif self.rotation_stage == 3:
+            self.blocks[1][1].deactivate()
+            self.blocks[3][2].deactivate()
+            self.blocks[3][0].activate()
+            self.blocks[3][1].activate()
+            self.rotation_stage = 0
 
 class PieceZ(Piece):
     """Class for the piece Z"""
@@ -230,27 +251,36 @@ class PieceZ(Piece):
     def __init__(self):
         super().__init__('Z')
         self.color = 'green'
-        self.blocks[1][2].activate() # Pivot Point
-        self.blocks[1][1].activate()
-        self.blocks[2][2].activate()
-        self.blocks[2][3].activate()
+        self.blocks[2][0].activate()
+        self.blocks[2][1].activate()
+        self.blocks[3][1].activate()
+        self.blocks[3][2].activate()
 
-    def rotate(self, rotation_stage=None):
-        if rotation_stage != None:
-            self.rotation_stage = rotation_stage
+    def rotate(self):
         if self.rotation_stage == 0:
-            self.blocks[1][1].deactivate()
-            self.blocks[2][3].deactivate()
-            self.blocks[1][3].activate()
-            self.blocks[0][3].activate()
+            self.blocks[3][1].deactivate()
+            self.blocks[3][2].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[3][0].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1):
-                self.blocks[1][3].deactivate()
-                self.blocks[0][3].deactivate()
-                self.blocks[1][1].activate()
-                self.blocks[2][3].activate()
-                self.rotation_stage = 0
+            self.blocks[3][0].deactivate()
+            self.blocks[2][0].deactivate()
+            self.blocks[1][0].activate()
+            self.blocks[2][2].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[1][1].deactivate()
+            self.blocks[1][0].deactivate()
+            self.blocks[1][2].activate()
+            self.blocks[3][1].activate()
+            self.rotation_stage = 3
+        elif self.rotation_stage == 3:
+            self.blocks[1][2].deactivate()
+            self.blocks[2][2].deactivate()
+            self.blocks[2][0].activate()
+            self.blocks[3][2].activate()
+            self.rotation_stage = 0
 
 class PieceL(Piece):
     """Class for the piece L"""
@@ -258,95 +288,81 @@ class PieceL(Piece):
     def __init__(self):
         super().__init__('L')
         self.color = 'orange'
-        self.blocks[1][1].activate()
-        self.blocks[2][1].activate()
-        self.blocks[1][2].activate() # Pivot Point
-        self.blocks[1][3].activate()
+        self.blocks[1][0].activate()
+        self.blocks[2][0].activate()
+        self.blocks[3][0].activate()
+        self.blocks[3][1].activate()
 
-    def rotate(self, rotation_stage=None):
-        if rotation_stage != None:
-            self.rotation_stage = rotation_stage
+    def rotate(self):
         if self.rotation_stage == 0:
-            self.blocks[1][1].deactivate()
-            self.blocks[2][1].deactivate()
-            self.blocks[1][3].deactivate()
-            self.blocks[0][2].activate()
-            self.blocks[2][2].activate()
-            self.blocks[2][3].activate()
+            self.blocks[3][0].deactivate()
+            self.blocks[3][1].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[1][2].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1):
-                self.blocks[0][2].deactivate()
-                self.blocks[2][2].deactivate()
-                self.blocks[2][3].deactivate()
-                self.blocks[1][1].activate()
-                self.blocks[1][3].activate()
-                self.blocks[0][3].activate()
-                self.rotation_stage = 2
+            self.blocks[1][0].deactivate()
+            self.blocks[2][0].deactivate()
+            self.blocks[2][2].activate()
+            self.blocks[3][2].activate()
+            self.rotation_stage = 2
         elif self.rotation_stage == 2:
             self.blocks[1][1].deactivate()
-            self.blocks[1][3].deactivate()
-            self.blocks[0][3].deactivate()
-            self.blocks[0][1].activate()
-            self.blocks[0][2].activate()
-            self.blocks[2][2].activate()
+            self.blocks[1][2].deactivate()
+            self.blocks[3][0].activate()
+            self.blocks[3][1].activate()
             self.rotation_stage = 3
         elif self.rotation_stage == 3:
-            if self.check_movement(1):
-                self.blocks[0][1].deactivate()
-                self.blocks[0][2].deactivate()
-                self.blocks[2][2].deactivate()
-                self.blocks[1][3].activate()
-                self.blocks[1][1].activate()
-                self.blocks[2][1].activate()
-                self.rotation_stage = 0
+            self.blocks[2][2].deactivate()
+            self.blocks[3][2].deactivate()
+            self.blocks[1][0].activate()
+            self.blocks[2][0].activate()
+            self.rotation_stage = 0
 
 class PieceJ(Piece):
-    """Class for the piece J"""
+    """Class for the pieces L and J"""
 
     def __init__(self):
         super().__init__('J')
         self.color = '#ff1493'
-        self.blocks[1][2].activate() # Pivot Point
+        self.blocks[3][0].activate()
+        self.blocks[3][1].activate()
+        self.blocks[2][1].activate()
         self.blocks[1][1].activate()
-        self.blocks[1][3].activate()
-        self.blocks[2][3].activate()
 
     def rotate(self):
         if self.rotation_stage == 0:
+            self.blocks[3][0].deactivate()
+            self.blocks[3][1].deactivate()
             self.blocks[1][1].deactivate()
-            self.blocks[1][3].deactivate()
-            self.blocks[2][3].deactivate()
-            self.blocks[0][2].activate()
-            self.blocks[0][3].activate()
+            self.blocks[1][0].activate()
+            self.blocks[2][0].activate()
             self.blocks[2][2].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1):
-                self.blocks[0][2].deactivate()
-                self.blocks[0][3].deactivate()
-                self.blocks[2][2].deactivate()
-                self.blocks[0][1].activate()
-                self.blocks[1][1].activate()
-                self.blocks[1][3].activate()
-                self.rotation_stage = 2
+            self.blocks[1][0].deactivate()
+            self.blocks[2][0].deactivate()
+            self.blocks[2][2].deactivate()
+            self.blocks[1][1].activate()
+            self.blocks[1][2].activate()
+            self.blocks[3][1].activate()
+            self.rotation_stage = 2
         elif self.rotation_stage == 2:
-            self.blocks[0][1].deactivate()
             self.blocks[1][1].deactivate()
-            self.blocks[1][3].deactivate()
-            self.blocks[0][2].activate()
-            self.blocks[2][1].activate()
+            self.blocks[1][2].deactivate()
+            self.blocks[3][1].deactivate()
+            self.blocks[2][0].activate()
             self.blocks[2][2].activate()
+            self.blocks[3][2].activate()
             self.rotation_stage = 3
         elif self.rotation_stage == 3:
-            if self.check_movement(1):
-                self.blocks[0][2].deactivate()
-                self.blocks[2][1].deactivate()
-                self.blocks[2][2].deactivate()
-                self.blocks[1][1].activate()
-                self.blocks[1][3].activate()
-                self.blocks[2][3].activate()
-                self.rotation_stage = 0
+            self.blocks[2][0].deactivate()
+            self.blocks[2][2].deactivate()
+            self.blocks[3][2].deactivate()
+            self.blocks[3][0].activate()
+            self.blocks[3][1].activate()
+            self.blocks[1][1].activate()
+            self.rotation_stage = 0
 
 class PieceO(Piece):
     """Class for the piece O"""
@@ -367,69 +383,65 @@ class PieceI(Piece):
 
     def __init__(self):
         super().__init__('I')
-        self.blocks[1][2].activate() # Pivot Point
+        self.blocks[0][0].activate()
         self.blocks[1][0].activate()
-        self.blocks[1][1].activate()
-        self.blocks[1][3].activate()
+        self.blocks[2][0].activate()
+        self.blocks[3][0].activate()
         self.color = 'cyan'
 
     def rotate(self):
         if self.rotation_stage == 0:
+            self.blocks[0][0].deactivate()
             self.blocks[1][0].deactivate()
-            self.blocks[1][1].deactivate()
-            self.blocks[1][3].deactivate()
-            self.blocks[0][2].activate()
-            self.blocks[2][2].activate()
+            self.blocks[2][0].deactivate()
+            self.blocks[3][1].activate()
             self.blocks[3][2].activate()
+            self.blocks[3][3].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1) and self.check_movement(1):
-                self.blocks[0][2].deactivate()
-                self.blocks[2][2].deactivate()
-                self.blocks[3][2].deactivate()
-                self.blocks[1][0].activate()
-                self.blocks[1][1].activate()
-                self.blocks[1][3].activate()
-                self.rotation_stage = 0
+            self.blocks[3][1].deactivate()
+            self.blocks[3][2].deactivate()
+            self.blocks[3][3].deactivate()
+            self.blocks[0][0].activate()
+            self.blocks[1][0].activate()
+            self.blocks[2][0].activate()
+            self.rotation_stage = 0
 
 class PieceT(Piece):
     """Class for the piece T"""
 
     def __init__(self):
         super().__init__('T')
-        self.blocks[1][2].activate() # Pivot Point
-        self.blocks[1][1].activate()
-        self.blocks[1][3].activate()
+        self.blocks[2][0].activate()
+        self.blocks[2][1].activate()
         self.blocks[2][2].activate()
+        self.blocks[3][1].activate()
         self.color = 'magenta'
 
     def rotate(self):
         if self.rotation_stage == 0:
-            self.blocks[1][1].deactivate()
-            self.blocks[0][2].activate()
+            self.blocks[2][2].deactivate()
+            self.blocks[1][1].activate()
             self.rotation_stage = 1
         elif self.rotation_stage == 1:
-            if self.check_movement(-1):
-                self.blocks[2][2].deactivate()
-                self.blocks[1][1].activate()
-                self.rotation_stage = 2
-        elif self.rotation_stage == 2:
-            self.blocks[1][3].deactivate()
+            self.blocks[3][1].deactivate()
             self.blocks[2][2].activate()
+            self.rotation_stage = 2
+        elif self.rotation_stage == 2:
+            self.blocks[2][0].deactivate()
+            self.blocks[3][1].activate()
             self.rotation_stage = 3
         elif self.rotation_stage == 3:
-            if self.check_movement(1):
-                self.blocks[0][2].deactivate()
-                self.blocks[1][3].activate()
-                self.rotation_stage = 0
+            self.blocks[1][1].deactivate()
+            self.blocks[2][0].activate()
+            self.rotation_stage = 0
 
 class Platform(Canvas):
     """Game Platform Class"""
-    def __init__(self, player, root):
+    def __init__(self, player):
         super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT\
             , background='black')
         self.focus_set()
-        self.root = root
         self.__init_game(player)
         self.pack()
 
@@ -438,7 +450,6 @@ class Platform(Canvas):
         self.__in_tutorial = True
         self.__in_game = True
         self.__in_menu = False
-        self.__is_speed_up = False
         self.__player = player
         self.__lines = 0
         self.__level = 1
@@ -447,16 +458,13 @@ class Platform(Canvas):
         self.__background = PhotoImage(file="bg.gif")
         self.__tutorial = PhotoImage(file="tutorial.gif")
         self.__game_over = PhotoImage(file="game_over.gif")
-        self.__backup_delay = Tetris.DELAY
         self.blocks = init_matrix(Tetris.COLS, Tetris.ROWS)
         self.bind_all('<Key>', self.__on_key_pressed)
-        self.bind('<KeyRelease>', self.__on_key_released)
         self.tutorial()
 
     def __select_random_piece(self):
         """Returns a random piece"""
         chosen_type = choice(Tetris.PIECE_TYPES)
-        chosen_type = 'O'
         if chosen_type == 'O':
             return PieceO()
         elif chosen_type == 'I':
@@ -472,56 +480,36 @@ class Platform(Canvas):
         elif chosen_type == 'T':
             return PieceT()
 
-    def __on_key_released(self, event):
-        """handles keyboard key released"""
-        key = event.keysym
-        if key == 'Down':
-            Tetris.DELAY = self.__backup_delay
-            self.__is_speed_up = False
-
     def __on_key_pressed(self, event):
-        """handles keyboard """
+        """handles piece movement"""
         key = event.keysym
         if key == 'Right':
             self.__current_piece.move_right(self.blocks)
-            self.__update_screen()
         elif key == 'Left':
             self.__current_piece.move_left(self.blocks)
-            self.__update_screen()
         elif key == 'Up':
             self.__current_piece.rotate()
-            self.__update_screen()
-        elif key == 'Down':
-            if not self.__is_speed_up:
-                self.__is_speed_up = True
-                self.__backup_delay = Tetris.DELAY
-                Tetris.DELAY = Tetris.SPEED_UP_DELAY
         elif key == 'Escape':
             if not self.__in_tutorial:
                 self.game_over()
         elif key == 'Return':
+            self.after_cancel(self.__current_job)
             if self.__in_tutorial:
-                self.after_cancel(self.__current_job)
                 self.__in_tutorial = False
                 self.__in_menu = False
                 self.__current_job = self.after(Tetris.DELAY, self.__tick)
             elif not self.__in_game and not self.__in_menu:
-                self.after_cancel(self.__current_job)
                 self.destroy()
                 self.__in_menu = True
-                Menu(self.__player.get_player_name(), self.root)
-
-    def __update_screen(self):
-        """ Updates the screen """
-        self.delete(ALL)
-        self.__draw_platform()
-        self.__draw_current_piece()
-        self.__draw_ui()
+                Menu(self.__player.get_player_name())
 
     def __tick(self):
         """creates a game cycle each timer event"""
         if self.__in_game:
-            self.__update_screen()
+            self.delete(ALL)
+            self.__draw_platform()
+            self.__draw_current_piece()
+            self.__draw_ui()
 
             # Checking if the current piece is colliding with the platform
             if not self.__is_colliding_with_platform():
@@ -553,13 +541,9 @@ class Platform(Canvas):
     def __level_up(self):
         """ Checking for level up, if so levels up the player"""
         temp = self.__lines // Tetris.LINES_LEVEL_UP
-
         if temp >= 1 and temp + 1 != self.__level:
             self.__level = (self.__lines // Tetris.LINES_LEVEL_UP) + 1
-            if self.__is_speed_up:
-                Tetris.DELAY = self.__backup_delay
-            Tetris.DELAY = clamp(Tetris.DELAY - 80, 50, Tetris.DELAY)
-            self.__backup_delay = Tetris.DELAY
+            Tetris.DELAY = clamp(Tetris.DELAY - 50, 100, Tetris.DELAY)
 
     def __get_lines(self):
         lines = []
@@ -626,11 +610,8 @@ class Platform(Canvas):
                 if block.is_activated():
                     x_index = block.get_pos_x() // Tetris.BLOCK_SIZE
                     y_index = block.get_pos_y() // Tetris.BLOCK_SIZE
-                    try:
-                        if self.blocks[y_index][x_index].is_activated():
-                            return True
-                    except IndexError:
-                        return False
+                    if self.blocks[y_index][x_index].is_activated():
+                        return True
         return False
 
     def __is_colliding_with_platform(self):
@@ -699,10 +680,9 @@ class Platform(Canvas):
 
 class Menu(Canvas):
     """Menu Canvas"""
-    def __init__(self, player_name, root):
+    def __init__(self, player_name):
         super().__init__(width=Tetris.PLATFORM_WIDTH, height=Tetris.PLATFORM_HEIGHT\
             , background='black')
-        self.root = root
         self.player_name = player_name
         self.__background = PhotoImage(file='home.gif')
         self.__play_btn_img = PhotoImage(file='play_btn.gif')
@@ -722,7 +702,7 @@ class Menu(Canvas):
             bg='black', activebackground='black')
         play_btn.place(relx=1, x=-127, y=201, anchor=NE)
 
-        exit_btn = Button(self, command=self.root.destroy)
+        exit_btn = Button(self, command=exit)
         exit_btn.config(image=self.__exit_btn_img, width=296, height=77, bd=0,\
             bg='black', activebackground='black')
         exit_btn.place(relx=1, x=-127, y=322, anchor=NE)
@@ -730,7 +710,7 @@ class Menu(Canvas):
     def __play_game(self):
         self.delete(ALL)
         self.destroy()
-        Platform(Player(self.player_name), self.root)
+        Platform(Player(self.player_name))
 
 class Tetris(Frame):
     """Main Tetris Class"""
@@ -741,14 +721,13 @@ class Tetris(Frame):
     ROWS = 18
     COLS = 10
     BLOCK_SIZE = 30
-    DELAY = 500
-    SPEED_UP_DELAY = 25
+    DELAY = 300
 
-    def __init__(self, player_name, root):
+    def __init__(self, player_name):
         super().__init__()
 
-        self.master.title('Tetris - Houssem - ISTY')
-        self.menu = Menu(player_name, root)
+        self.master.title('Tetris - Houssem')
+        self.menu = Menu(player_name)
         self.pack()
 
 def main():
@@ -760,8 +739,28 @@ def main():
         player_name = input("ENTER YOUR NAME: ")
         size = len(player_name)
     player_name = player_name.upper()
-    tetris_game = Tetris(player_name, root)
+    tetris_game = Tetris(player_name)
     root.mainloop()
+
+def debug_print(matrix):
+    """Debug function"""
+    for row in matrix:
+        for col in row:
+            if col.is_activated():
+                print('1 ', end='')
+            else:
+                print('0 ', end='')
+        print()
+
+def debug_print_reversed(matrix):
+    """Debug function"""
+    for row in reversed(matrix):
+        for col in row:
+            if col.is_activated():
+                print('1 ', end='')
+            else:
+                print('0 ', end='')
+        print()
 
 if __name__ == '__main__':
     main()
